@@ -13,7 +13,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 支持多平台编译（匹配alpine的linux/amd64架构，也可扩展）
+    # 支持多平台编译（匹配alpine的linux/amd64架构）
     strategy:
       matrix:
         goos: [linux]
@@ -28,8 +28,8 @@ jobs:
       - name: Set up Go 1.13
         uses: actions/setup-go@v5
         with:
-          go-version: '1.13' # 严格匹配Dockerfile的Go版本
-          cache: true        # 缓存go mod依赖，加速构建
+          go-version: '1.13' # Strictly match Dockerfile's Go version
+          cache: true        # Cache go mod dependencies for faster builds
 
       # 步骤3：安装git（匹配Dockerfile中的apk add git）
       - name: Install git (match Dockerfile)
@@ -40,24 +40,24 @@ jobs:
       # 步骤4：执行Go编译（完全复刻Dockerfile的编译流程）
       - name: Build Go binary (match Dockerfile)
         run: |
-          # 复刻Dockerfile中的环境和命令
-          export CGO_ENABLED=0  # alpine环境默认关闭CGO，生成静态二进制
+          # Replicate Dockerfile environment and commands
+          export CGO_ENABLED=0  # Disable CGO (matches alpine environment)
           export GOOS=${{ matrix.goos }}
           export GOARCH=${{ matrix.goarch }}
-          export GO111MODULE=on # Go 1.13需要显式开启mod
+          export GO111MODULE=on # Enable modules for Go 1.13
 
-          # 1. 下载依赖（对应Dockerfile的go mod download）
+          # 1. Download dependencies (matches Dockerfile: go mod download)
           go mod download
 
-          # 2. 编译程序（对应Dockerfile的go build .）
-          # 输出文件名和Dockerfile一致为BookBrowser，添加平台标识便于区分
+          # 2. Build the program (matches Dockerfile: go build .)
+          # Output filename matches Dockerfile (BookBrowser) with platform suffix
           go build -o BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }} \
-            -ldflags="-s -w" \ # 精简二进制体积（可选，和Dockerfile效果一致）
+            -ldflags="-s -w" \
             .
 
-          # 验证编译产物
+          # Verify build artifact
           ls -lh BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
-          file BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }} # 查看文件类型，确认是静态编译
+          file BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }} # Check file type (static binary)
 
       # 步骤5：上传编译产物（供下载使用）
       - name: Upload binary artifact
@@ -65,4 +65,4 @@ jobs:
         with:
           name: BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
           path: BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
-          retention-days: 30 # 产物保留30天
+          retention-days: 30 # Keep artifacts for 30 days
