@@ -1,68 +1,68 @@
-# 工作流名称：编译BookBrowser可执行程序
-name: Build BookBrowser Binary
+# 工作流名称：编译BookBrowser纯Go可执行程序
+name: Build BookBrowser Go Binary
 
 # 触发条件：main分支push/PR、手动触发
 on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
   workflow_dispatch: # 手动触发
 
 # 编译任务
 jobs:
   build:
     runs-on: ubuntu-latest
-    # 支持多平台编译（可选，如amd64/arm64）
+    # 支持多平台编译（匹配alpine的linux/amd64架构，也可扩展）
     strategy:
       matrix:
         goos: [linux]
         goarch: [amd64, arm64]
-        # 如需Windows/macOS，可添加：
-        # goos: [linux, windows, darwin]
-        # goarch: [amd64, arm64]
 
     steps:
-      # 步骤1：拉取代码（包含子模块，如有）
+      # 步骤1：拉取仓库代码
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          submodules: recursive # 如有前端子模块需拉取
 
-      # 步骤2：安装Node.js（前端构建依赖）
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18' # 匹配原Dockerfile的Node版本
-          cache: 'npm'       # 缓存npm依赖，加速构建
-          cache-dependency-path: 'frontend/package-lock.json' # 前端依赖文件路径（按需调整）
-
-      # 步骤3：安装前端依赖并构建
-      - name: Build frontend assets
-        working-directory: ./frontend # 前端代码目录（按需调整）
-        run: |
-          npm install
-          npm run build # 匹配原Dockerfile的前端打包命令
-
-      # 步骤4：安装Go环境（后端编译依赖）
-      - name: Set up Go
+      # 步骤2：安装Go 1.13环境（完全匹配Dockerfile的golang:1.13-alpine）
+      - name: Set up Go 1.13
         uses: actions/setup-go@v5
         with:
-          go-version: '1.21' # 匹配原Dockerfile的Go版本
-          cache: true        # 缓存Go模块，加速构建
+          go-version: '1.13' # 严格匹配Dockerfile的Go版本
+          cache: true        # 缓存go mod依赖，加速构建
 
-      # 步骤5：编译Go后端（绑定前端资源）
-      - name: Build Go binary
+      # 步骤3：安装git（匹配Dockerfile中的apk add git）
+      - name: Install git (match Dockerfile)
         run: |
-          # 设置编译环境变量（匹配原Dockerfile的编译参数）
-          CGO_ENABLED=0 
-          GOOS=${{ matrix.goos }} 
-          GOARCH=${{ matrix.goarch }}
-          # 编译可执行文件（输出名包含平台信息）
-          go build -o bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }} \
-            -ldflags="-s -w" \ # 精简二进制体积
-            ./cmd/main.go      # 入口文件路径（按需调整）
+          sudo apt-get update
+          sudo apt-get install -y git
 
-      # 步骤6：上传编译产物（供下载）
+      # 步骤4：执行Go编译（完全复刻Dockerfile的编译流程）
+      - name: Build Go binary (match Dockerfile)
+        run: |
+          # 复刻Dockerfile中的环境和命令
+          export CGO_ENABLED=0  # alpine环境默认关闭CGO，生成静态二进制
+          export GOOS=${{ matrix.goos }}
+          export GOARCH=${{ matrix.goarch }}
+          export GO111MODULE=on # Go 1.13需要显式开启mod
+
+          # 1. 下载依赖（对应Dockerfile的go mod download）
+          go mod download
+
+          # 2. 编译程序（对应Dockerfile的go build .）
+          # 输出文件名和Dockerfile一致为BookBrowser，添加平台标识便于区分
+          go build -o BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }} \
+            -ldflags="-s -w" \ # 精简二进制体积（可选，和Dockerfile效果一致）
+            .
+
+          # 验证编译产物
+          ls -lh BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
+          file BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }} # 查看文件类型，确认是静态编译
+
+      # 步骤5：上传编译产物（供下载使用）
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4
         with:
-          name: bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }}
+          name: BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: BookBrowser-${{ matrix.goos }}-${{ matrix.goarch }}
           retention-days: 30 # 产物保留30天
