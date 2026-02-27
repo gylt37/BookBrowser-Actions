@@ -1,0 +1,68 @@
+# 工作流名称：编译BookBrowser可执行程序
+name: Build BookBrowser Binary
+
+# 触发条件：main分支push/PR、手动触发
+on:
+  workflow_dispatch: # 手动触发
+
+# 编译任务
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # 支持多平台编译（可选，如amd64/arm64）
+    strategy:
+      matrix:
+        goos: [linux]
+        goarch: [amd64, arm64]
+        # 如需Windows/macOS，可添加：
+        # goos: [linux, windows, darwin]
+        # goarch: [amd64, arm64]
+
+    steps:
+      # 步骤1：拉取代码（包含子模块，如有）
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive # 如有前端子模块需拉取
+
+      # 步骤2：安装Node.js（前端构建依赖）
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # 匹配原Dockerfile的Node版本
+          cache: 'npm'       # 缓存npm依赖，加速构建
+          cache-dependency-path: 'frontend/package-lock.json' # 前端依赖文件路径（按需调整）
+
+      # 步骤3：安装前端依赖并构建
+      - name: Build frontend assets
+        working-directory: ./frontend # 前端代码目录（按需调整）
+        run: |
+          npm install
+          npm run build # 匹配原Dockerfile的前端打包命令
+
+      # 步骤4：安装Go环境（后端编译依赖）
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21' # 匹配原Dockerfile的Go版本
+          cache: true        # 缓存Go模块，加速构建
+
+      # 步骤5：编译Go后端（绑定前端资源）
+      - name: Build Go binary
+        run: |
+          # 设置编译环境变量（匹配原Dockerfile的编译参数）
+          CGO_ENABLED=0 
+          GOOS=${{ matrix.goos }} 
+          GOARCH=${{ matrix.goarch }}
+          # 编译可执行文件（输出名包含平台信息）
+          go build -o bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }} \
+            -ldflags="-s -w" \ # 精简二进制体积
+            ./cmd/main.go      # 入口文件路径（按需调整）
+
+      # 步骤6：上传编译产物（供下载）
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: bookbrowser-${{ matrix.goos }}-${{ matrix.goarch }}
+          retention-days: 30 # 产物保留30天
